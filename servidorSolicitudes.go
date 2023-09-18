@@ -1,72 +1,96 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
+	"strconv"
 )
 
-// Estructura que se utilizará como plantilla para la decodificación de las requests
-type Request struct {
-	UserId  int    `json:"userId"`
-	MVType  string `json:"mvtype"`
-	Request string `json:"request"`
-}
-
 // Se declara la estructura tipo cola para guardar las solicitudes
-type Queue []Request
+type Queue []([]byte)
 
 var myQueue Queue
-var aux int
+
+const serverPort = 3333
 
 // Handler que atenderá las solicitudes de creación de máquinas virtuales
 func handlercvm(w http.ResponseWriter, r *http.Request) {
 
+	flag := true
 	//Se envía la respuesta al cliente
-	fmt.Fprintf(w, "received")
+	fmt.Fprintf(w, "sReqst: received")
 
-	//Se lee el cuerpo de la solicitud y en caso de no poder leerolo, se imprime el error
+	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Printf("server: no se pudo leer el body: %s\n", err)
 	}
 
-	//Se crea una variable tipo request en la cual se guardarán los datos del Json
-	request := Request{}
-
-	//Se decodifica el objeto Json y se guarda en la variable request
-	derr := json.Unmarshal(reqBody, &request)
-	if derr != nil {
-		panic(derr)
-	}
-	aux += 1
 	//Agrega un elemento a la cola
-	myQueue.Enqueue(request)
+	myQueue.Enqueue(reqBody)
 
-	//Elimnar elementos de la cola y mostrarlos
-	if aux == 3 {
-		for len(myQueue) > 0 {
-			item, err := myQueue.Dequeue()
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-			fmt.Println("Request extraido:, ", item)
+	for flag {
+		res, err := http.Get("http://localhost:3333")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		valorBool, err := strconv.ParseBool(string(body))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if valorBool {
+			solicitud, _ := myQueue.Dequeue()
+			solicitarMV(solicitud)
+			flag = false
 		}
 	}
+}
 
+func solicitarMV(request []byte) {
+	fmt.Printf("AAAAAAAAAAAAAAA")
+	bodyReader := bytes.NewReader(request)
+	requestURL := fmt.Sprintf("http://localhost:%d/procSolic", serverPort)
+	req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
+	if err != nil {
+		fmt.Printf("client: could not create request: %s\n", err)
+		os.Exit(1)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("client: error making http request: %s\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("client: status code: %d\n", res.StatusCode)
+
+	resBody, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Printf("client: could not read response body: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("client: response body: %s\n", resBody)
 }
 
 // Método para agregar un Request a la cola
-func (q *Queue) Enqueue(item Request) {
+func (q *Queue) Enqueue(item []byte) {
 	*q = append(*q, item)
 }
 
 // Elimina un Request de la cola y lo devuelve
-func (q *Queue) Dequeue() (Request, error) {
+func (q *Queue) Dequeue() ([]byte, error) {
+
 	if len(*q) == 0 {
-		return Request{}, fmt.Errorf("La cola está vacía")
+		return []byte{}, fmt.Errorf("La cola está vacía")
 	}
 	item := (*q)[0]
 	*q = (*q)[1:]
@@ -75,7 +99,6 @@ func (q *Queue) Dequeue() (Request, error) {
 }
 
 func main() {
-	aux = 0
 	http.HandleFunc("/crearmv", handlercvm)
 	fmt.Println("Servidor escuchando en el puerto :8080")
 	http.ListenAndServe(":8080", nil)
