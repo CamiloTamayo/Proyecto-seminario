@@ -15,8 +15,9 @@ type Request struct {
 	Request string `json:"request"`
 }
 
+// Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("BBBBBBBBBBBBBBB")
+
 	//Se envía la respuesta al cliente
 	fmt.Fprintf(w, "sReqst: received")
 
@@ -34,12 +35,13 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	if derr != nil {
 		panic(derr)
 	}
-	fmt.Print(request)
 	fmt.Printf(request.MVType + " " + request.Request)
 }
 
+// Variable que nos indica que el servidor se encuentra libre
 var flagAvailable bool
 
+// Función para dar respuesta a las solicitudes de disponibilidad del servidor de procesamiento
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	if flagAvailable {

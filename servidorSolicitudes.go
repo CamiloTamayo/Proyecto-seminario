@@ -33,21 +33,26 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 	//Agrega un elemento a la cola
 	myQueue.Enqueue(reqBody)
 
+	//Ciclo que nos permite escuchar el servidor para enviarle una Request
 	for flag {
+		//Se realiza la solicitud para saber si el servidor de procesamiento está disponible
 		res, err := http.Get("http://localhost:3333")
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer res.Body.Close()
+		//Se obtiene la respuesta
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			log.Fatal(err)
 		}
+		//Se convierte la respuesta a boolean
 		valorBool, err := strconv.ParseBool(string(body))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		//Si el servidor de procesamiento está disponible, se envía la solicitud y se acaba el ciclo
 		if valorBool {
 			solicitud, _ := myQueue.Dequeue()
 			solicitarMV(solicitud)
@@ -57,7 +62,7 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 }
 
 func solicitarMV(request []byte) {
-	fmt.Printf("AAAAAAAAAAAAAAA")
+
 	bodyReader := bytes.NewReader(request)
 	requestURL := fmt.Sprintf("http://localhost:%d/procSolic", serverPort)
 	req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
