@@ -105,6 +105,6 @@ func (q *Queue) Dequeue() ([]byte, error) {
 
 func main() {
 	http.HandleFunc("/crearmv", handlercvm)
-	fmt.Println("Servidor escuchando en el puerto :8080")
-	http.ListenAndServe(":8080", nil)
+	fmt.Println("Servidor escuchando en el puerto :8000")
+	http.ListenAndServe(":8000", nil)
 }

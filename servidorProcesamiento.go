@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/user"
 
 	"golang.org/x/crypto/ssh"
@@ -18,16 +19,32 @@ var flagAvailable bool
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type Request struct {
-	UserId  int    `json:"userId"`
-	MVType  string `json:"mvtype"`
-	Request string `json:"request"`
+	Estado   string `json:"estado"`
+	Hostname string `json:"hostname"`
+	IP       string `json:"ip"`
+	Nombre   string `json:"nombre"`
+	IdMF     int    `json:"idMF"`
+	IdUser   int    `json:"idUser"`
+	TipoMV   int    `json:"tipoMV"`
+}
+
+type MaquinaFisica struct {
+	Id            int      `json:"idMF"`
+	Ip            string   `json:"ip"`
+	Ram           int      `json:"ramMB"`
+	Cpu           int      `json:"cpu"`
+	Storage       int      `json:"storageGB"`
+	Hostname      string   `json:"hostname"`
+	Os            string   `json:"os"`
+	BridgeAdapter string   `json:"bridgeAdapter"`
+	Maquinas      []string `json:"maquinas"`
 }
 
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
 
 	serverUser, _ := user.Current()
-	addr := serverUser.HomeDir + ".ssh/"
+	addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
 	fmt.Fprintf(w, "sReqst: received")
 
@@ -45,8 +62,9 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	if derr != nil {
 		panic(derr)
 	}
-
-	sendSSH("192.168.1.40", addr+"known_hosts", addr+"id_rsa")
+	mf := obtenerMF(2)
+	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa")
+	crearMVAPI(reqBody)
 }
 
 // Función para dar respuesta a las solicitudes de disponibilidad del servidor de procesamiento
@@ -60,7 +78,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendSSH(ip string, addr string, addrKey string) {
+func sendSSH(mf MaquinaFisica, addr string, addrKey string) {
 
 	hostKeyCallback, err := knownhosts.New(addr)
 	if err != nil {
@@ -80,14 +98,14 @@ func sendSSH(ip string, addr string, addrKey string) {
 	}
 
 	config := &ssh.ClientConfig{
-		User: "jucat",
+		User: mf.Hostname,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         0,
 	}
-	client, err := ssh.Dial("tcp", ip+":22", config)
+	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
 		panic("Fallo al dial: " + err.Error())
 	}
@@ -100,12 +118,60 @@ func sendSSH(ip string, addr string, addrKey string) {
 
 	var b bytes.Buffer
 	session.Stdout = &b
-	errRun := session.Run(`VBoxManage createvm --name Debian --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 "Realtek PCIe GbE Family Controller" & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\DiscoMulti.vdi"`)
+	errRun := session.Run(`VBoxManage createvm --name Debian --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 ` + mf.BridgeAdapter + ` & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`)
 	if errRun != nil {
 		fmt.Println("Falló al ejecutar: " + errRun.Error())
 	}
 	fmt.Println(b.String())
 
+}
+
+func crearMVAPI(request []byte) {
+	port := 8080
+	bodyReader := bytes.NewReader(request)
+	requestURL := fmt.Sprintf("http://localhost:%d/api/savemv", port)
+	req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
+	if err != nil {
+		fmt.Printf("Servidor procesamiento: No se pudo realizar la solicitud: %s\n", err)
+		os.Exit(1)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("Servidor procesamiento: error creando http request: %s\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Servidor procesamiento: status code: %d\n", res.StatusCode)
+
+	resBody, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Printf("Servidor procesamiento: no se pudo leer response body: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Servidor procesamiento: response body: %s\n", resBody)
+}
+
+func obtenerMF(idMF int) MaquinaFisica {
+	requestURL := fmt.Sprintf("http://localhost:8080/api/getmf/%d", idMF)
+	res, err := http.Get(requestURL)
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		os.Exit(1)
+	}
+	resBody, err := ioutil.ReadAll(res.Body)
+	//Se crea una variable tipo request en la cual se guardarán los datos del Json
+	mf := MaquinaFisica{}
+
+	//Se decodifica el objeto Json y se guarda en la variable request
+	derr := json.Unmarshal(resBody, &mf)
+	if derr != nil {
+		panic(derr)
+	}
+
+	fmt.Println(mf.Ip)
+	fmt.Println(mf.BridgeAdapter)
+	fmt.Println(mf.Maquinas)
+	return mf
 }
 
 func main() {

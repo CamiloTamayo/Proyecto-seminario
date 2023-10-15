@@ -9,11 +9,15 @@ import (
 )
 
 func main() {
-	const serverPort = 8080
+	const serverPort = 8000
 	jsonBody := []byte(`{
-		"userId": 1,
-		"mvtype": "Plantilla estandar",
-		"request": "crear mv"
+		"estado": "creada",
+		"hostname": "admin",
+		"ip": "192.168.1.40",
+		"nombre": "MV_1234",
+		"idMF": 1,
+		"idUser": 1,
+		"tipoMV": 1
 	}`)
 	bodyReader := bytes.NewReader(jsonBody)
 
