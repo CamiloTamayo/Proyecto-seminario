@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"strconv"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -46,7 +47,6 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
-	fmt.Fprintf(w, "sReqst: received")
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -62,9 +62,13 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	if derr != nil {
 		panic(derr)
 	}
+	fmt.Println(request)
 	mf := obtenerMF(2)
+	request.IdMF = mf.Id
+	request.TipoMV = 1
 	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa")
-	crearMVAPI(reqBody)
+	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
+	fmt.Fprintf(w, response)
 }
 
 // Función para dar respuesta a las solicitudes de disponibilidad del servidor de procesamiento
@@ -124,31 +128,6 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string) {
 	}
 	fmt.Println(b.String())
 
-}
-
-func crearMVAPI(request []byte) {
-	port := 8080
-	bodyReader := bytes.NewReader(request)
-	requestURL := fmt.Sprintf("http://localhost:%d/api/savemv", port)
-	req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
-	if err != nil {
-		fmt.Printf("Servidor procesamiento: No se pudo realizar la solicitud: %s\n", err)
-		os.Exit(1)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Printf("Servidor procesamiento: error creando http request: %s\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Servidor procesamiento: status code: %d\n", res.StatusCode)
-
-	resBody, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		fmt.Printf("Servidor procesamiento: no se pudo leer response body: %s\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("Servidor procesamiento: response body: %s\n", resBody)
 }
 
 func obtenerMF(idMF int) MaquinaFisica {

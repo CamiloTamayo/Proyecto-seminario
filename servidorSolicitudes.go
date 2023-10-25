@@ -19,16 +19,17 @@ const serverPort = 3333
 
 // Handler que atenderá las solicitudes de creación de máquinas virtuales
 func handlercvm(w http.ResponseWriter, r *http.Request) {
-
+	enableCors(&w)
 	flag := true
 	//Se envía la respuesta al cliente
-	fmt.Fprintf(w, "sReqst: received")
+	fmt.Println(w.Header())
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Printf("server: no se pudo leer el body: %s\n", err)
 	}
+	fmt.Println(bytes.NewReader(reqBody))
 
 	//Agrega un elemento a la cola
 	myQueue.Enqueue(reqBody)
@@ -55,13 +56,13 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 		//Si el servidor de procesamiento está disponible, se envía la solicitud y se acaba el ciclo
 		if valorBool {
 			solicitud, _ := myQueue.Dequeue()
-			solicitarMV(solicitud)
+			fmt.Fprintf(w, string(solicitarMV(solicitud)))
 			flag = false
 		}
 	}
 }
 
-func solicitarMV(request []byte) {
+func solicitarMV(request []byte) []byte {
 
 	bodyReader := bytes.NewReader(request)
 	requestURL := fmt.Sprintf("http://localhost:%d/procSolic", serverPort)
@@ -84,6 +85,7 @@ func solicitarMV(request []byte) {
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
+	return resBody
 }
 
 // Método para agregar un Request a la cola
@@ -101,6 +103,10 @@ func (q *Queue) Dequeue() ([]byte, error) {
 	*q = (*q)[1:]
 
 	return item, nil
+}
+
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
 }
 
 func main() {
