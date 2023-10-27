@@ -20,13 +20,14 @@ var flagAvailable bool
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type Request struct {
-	Estado   string `json:"estado"`
-	Hostname string `json:"hostname"`
-	IP       string `json:"ip"`
-	Nombre   string `json:"nombre"`
-	IdMF     int    `json:"idMF"`
-	IdUser   int    `json:"idUser"`
-	TipoMV   int    `json:"tipoMV"`
+	Estado    string `json:"estado"`
+	Hostname  string `json:"hostname"`
+	IP        string `json:"ip"`
+	Nombre    string `json:"nombre"`
+	IdMF      int    `json:"idMF"`
+	IdUser    int    `json:"idUser"`
+	TipoMV    int    `json:"tipoMV"`
+	Solicitud string `json:"solicitud"`
 }
 
 type MaquinaFisica struct {
@@ -64,11 +65,35 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(request)
 	mf := obtenerMF(2)
+	comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
-	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa")
+	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
 	fmt.Fprintf(w, response)
+}
+
+func clasificar(request Request, mf MaquinaFisica) string {
+
+	comando := ""
+
+	switch request.Solicitud {
+
+	case "start":
+		comando = "VBoxManage startvm Debian" //+ request.Nombre
+		break
+
+	case "create":
+		fmt.Println(mf.BridgeAdapter)
+		comando = `VBoxManage createvm --name Debian --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`
+		fmt.Println(comando)
+
+	case "finish":
+		comando = "VBoxManage controlvm Debian poweroff" //+ request.Nombre + " poweroff"
+	}
+
+	return comando
+
 }
 
 // Función para dar respuesta a las solicitudes de disponibilidad del servidor de procesamiento
@@ -82,7 +107,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendSSH(mf MaquinaFisica, addr string, addrKey string) {
+func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) {
 
 	hostKeyCallback, err := knownhosts.New(addr)
 	if err != nil {
@@ -122,7 +147,8 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string) {
 
 	var b bytes.Buffer
 	session.Stdout = &b
-	errRun := session.Run(`VBoxManage createvm --name Debian --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 ` + mf.BridgeAdapter + ` & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`)
+	errRun := session.Run(comando)
+	fmt.Println("CORRE COMANDO")
 	if errRun != nil {
 		fmt.Println("Falló al ejecutar: " + errRun.Error())
 	}
@@ -146,10 +172,6 @@ func obtenerMF(idMF int) MaquinaFisica {
 	if derr != nil {
 		panic(derr)
 	}
-
-	fmt.Println(mf.Ip)
-	fmt.Println(mf.BridgeAdapter)
-	fmt.Println(mf.Maquinas)
 	return mf
 }
 
