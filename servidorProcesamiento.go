@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/user"
 	"strconv"
 
 	"golang.org/x/crypto/ssh"
@@ -19,7 +18,8 @@ import (
 var flagAvailable bool
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
-type Request struct {
+type MaquinaVirtual struct {
+	Id        string `json:"id"`
 	Estado    string `json:"estado"`
 	Hostname  string `json:"hostname"`
 	IP        string `json:"ip"`
@@ -45,8 +45,8 @@ type MaquinaFisica struct {
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
 
-	serverUser, _ := user.Current()
-	addr := serverUser.HomeDir + "/.ssh"
+	//serverUser, _ := user.Current()
+	//addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
@@ -56,7 +56,7 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Se crea una variable tipo request en la cual se guardarán los datos del Json
-	request := Request{}
+	request := MaquinaVirtual{}
 
 	//Se decodifica el objeto Json y se guarda en la variable request
 	derr := json.Unmarshal(reqBody, &request)
@@ -65,19 +65,20 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(request)
 	mf := obtenerMF(2)
-	comando := clasificar(request, mf)
+	//comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
-	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+	//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
+	guardarVM(request)
 	fmt.Fprintf(w, response)
 }
 
-func clasificar(request Request, mf MaquinaFisica) string {
+func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	comando := ""
 
-	switch request.Solicitud {
+	switch maquinaVirtual.Solicitud {
 
 	case "start":
 		comando = "VBoxManage startvm Debian" //+ request.Nombre
@@ -154,6 +155,37 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) {
 	}
 	fmt.Println(b.String())
 
+}
+
+func guardarVM(vm MaquinaVirtual) {
+	vm.Id = ""
+	//reqBody, err := json.Marshal(vm)
+
+	jsonBody := []byte(`{"nombre":"` + vm.Nombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
+	//bodyReader := bytes.NewReader(jsonBody)
+	fmt.Println(string(jsonBody))
+
+	//requestURL := fmt.Sprintf("http://localhost:8080/api/savevm")
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		fmt.Printf("client: could not create request: %s\n", err)
+		os.Exit(1)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("client: error making http request: %s\n", err)
+		os.Exit(1)
+	}
+
+	resBody, err := ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		fmt.Printf("client: could not read response body: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("client: response body: %s\n", resBody)
 }
 
 func obtenerMF(idMF int) MaquinaFisica {
