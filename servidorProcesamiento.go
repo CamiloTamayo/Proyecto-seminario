@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"os/user"
 	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -45,8 +48,8 @@ type MaquinaFisica struct {
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
 
-	//serverUser, _ := user.Current()
-	//addr := serverUser.HomeDir + "/.ssh"
+	serverUser, _ := user.Current()
+	addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
@@ -64,11 +67,12 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		panic(derr)
 	}
 	fmt.Println(request)
-	mf := obtenerMF(2)
-	//comando := clasificar(request, mf)
+	fmt.Println(asignar())
+	mf := asignar()
+	comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
-	//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
 	guardarVM(request)
 	fmt.Fprintf(w, response)
@@ -108,8 +112,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) {
-
+func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) string {
+	fmt.Println("Error ")
 	hostKeyCallback, err := knownhosts.New(addr)
 	if err != nil {
 		log.Fatal(err)
@@ -122,7 +126,6 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) {
 	}
 
 	signer, errSecond := ssh.ParsePrivateKey(key)
-
 	if errSecond != nil {
 		log.Fatalf("No se pudo convertir la llave privada: %v", errSecond)
 	}
@@ -135,37 +138,37 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) {
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         0,
 	}
+	fmt.Println(mf.Ip)
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
-		panic("Fallo al dial: " + err.Error())
+		fmt.Println("Error 1" + err.Error())
+		return "Error: Fallo al dial " + err.Error()
 	}
 	defer client.Close()
 	session, err := client.NewSession()
 	if err != nil {
-		panic("Falló al crear la sesión: " + err.Error())
+		fmt.Println("Error 2")
+		return "Error: No se pudo crear la sesión"
 	}
 	defer session.Close()
 
 	var b bytes.Buffer
 	session.Stdout = &b
 	errRun := session.Run(comando)
-	fmt.Println("CORRE COMANDO")
-	if errRun != nil {
-		fmt.Println("Falló al ejecutar: " + errRun.Error())
-	}
-	fmt.Println(b.String())
 
+	if errRun != nil {
+		fmt.Println("Error 3")
+		return "Error: Falló al ejecutar: " + errRun.Error()
+	}
+
+	fmt.Println("TERMINA SSH")
+
+	return b.String()
 }
 
 func guardarVM(vm MaquinaVirtual) {
 	vm.Id = ""
-	//reqBody, err := json.Marshal(vm)
-
 	jsonBody := []byte(`{"nombre":"` + vm.Nombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
-	//bodyReader := bytes.NewReader(jsonBody)
-	fmt.Println(string(jsonBody))
-
-	//requestURL := fmt.Sprintf("http://localhost:8080/api/savevm")
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
@@ -186,6 +189,7 @@ func guardarVM(vm MaquinaVirtual) {
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
+
 }
 
 func obtenerMF(idMF int) MaquinaFisica {
@@ -204,6 +208,41 @@ func obtenerMF(idMF int) MaquinaFisica {
 	if derr != nil {
 		panic(derr)
 	}
+	return mf
+}
+
+func asignar() MaquinaFisica {
+
+	serverUser, _ := user.Current()
+	addr := serverUser.HomeDir + `\.ssh`
+	mf := MaquinaFisica{}
+	var flag bool = true
+	requestURL := fmt.Sprintf("http://localhost:8080/api/getmfs")
+	res, err := http.Get(requestURL)
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		os.Exit(1)
+	}
+	resBody, err := ioutil.ReadAll(res.Body)
+	lista := []MaquinaFisica{}
+
+	derr := json.Unmarshal(resBody, &lista)
+	if derr != nil {
+		panic(derr)
+	}
+	fmt.Println(lista)
+	for flag {
+		var ale int = rand.Intn(len(lista))
+		mf = lista[ale]
+		fmt.Print(mf)
+		var respuesta string = sendSSH(mf, addr+`\known_hosts`, "C:/Users/espev/.ssh/id_rsa", "calc")
+		fmt.Println(addr)
+		if !strings.Contains(respuesta, "Error") {
+			flag = false
+			fmt.Println(respuesta)
+		}
+	}
+
 	return mf
 }
 
