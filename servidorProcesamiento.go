@@ -81,20 +81,21 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	comando := ""
+	nombre := "Debian" + strconv.Itoa(obtenerIdMV())
 
 	switch maquinaVirtual.Solicitud {
 
 	case "start":
-		comando = "VBoxManage startvm Debian" //+ request.Nombre
+		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
 		break
 
 	case "create":
 		fmt.Println(mf.BridgeAdapter)
-		comando = `VBoxManage createvm --name Debian --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`
+		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`
 		fmt.Println(comando)
 
 	case "finish":
-		comando = "VBoxManage controlvm Debian poweroff" //+ request.Nombre + " poweroff"
+		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
 	}
 
 	return comando
@@ -168,7 +169,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 
 func guardarVM(vm MaquinaVirtual) {
 	vm.Id = ""
-	jsonBody := []byte(`{"nombre":"` + vm.Nombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
+	jsonBody := []byte(`{"nombre":` + `"Debian` + strconv.Itoa(obtenerIdMV()) + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
@@ -211,6 +212,24 @@ func obtenerMF(idMF int) MaquinaFisica {
 	return mf
 }
 
+func obtenerIdMV() int {
+	requestURL := fmt.Sprintf("http://localhost:8080/api/obtenerMayor")
+	res, err := http.Get(requestURL)
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		os.Exit(1)
+	}
+	resBody, err := ioutil.ReadAll(res.Body)
+
+	var idMaquinaVirtual int
+
+	derr := json.Unmarshal(resBody, &idMaquinaVirtual)
+	if derr != nil {
+		panic(derr)
+	}
+	return idMaquinaVirtual + 1
+}
+
 func asignar() MaquinaFisica {
 
 	serverUser, _ := user.Current()
@@ -248,6 +267,7 @@ func asignar() MaquinaFisica {
 
 func main() {
 
+	fmt.Println(obtenerIdMV())
 	flagAvailable = true
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/procSolic", handlervm)
