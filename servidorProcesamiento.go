@@ -96,6 +96,9 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
+
+	case "delete":
+		comando = "VBoxManage unregistervm " + maquinaVirtual.Nombre + " --delete"
 	}
 
 	return comando
@@ -190,6 +193,10 @@ func guardarVM(vm MaquinaVirtual) {
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
+
+}
+
+func eliminarVM(vm MaquinaVirtual) {
 
 }
 
