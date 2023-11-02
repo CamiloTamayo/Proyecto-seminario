@@ -22,15 +22,16 @@ var flagAvailable bool
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
-	Id        string `json:"id"`
-	Estado    string `json:"estado"`
-	Hostname  string `json:"hostname"`
-	IP        string `json:"ip"`
-	Nombre    string `json:"nombre"`
-	IdMF      int    `json:"idMF"`
-	IdUser    int    `json:"idUser"`
-	TipoMV    int    `json:"tipoMV"`
-	Solicitud string `json:"solicitud"`
+	Id           string `json:"id"`
+	Estado       string `json:"estado"`
+	Hostname     string `json:"hostname"`
+	IP           string `json:"ip"`
+	Nombre       string `json:"nombre"`
+	IdMF         int    `json:"idMF"`
+	IdUser       int    `json:"idUser"`
+	TipoMV       int    `json:"tipoMV"`
+	Solicitud    string `json:"solicitud"`
+	NumeroNombre string `json:"numeroNombre"`
 }
 
 type MaquinaFisica struct {
@@ -69,13 +70,12 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	fmt.Print("REQUEST: ")
 	fmt.Println(request)
 	if strings.Compare(request.Solicitud, "create") == 0 {
-		guardarVM(request)
 		mf = asignar()
+		request.IdMF = mf.Id
+		guardarVM(request)
 	} else {
 		mf = obtenerMF(request.IdMF)
 	}
-
-	fmt.Println("IP MF: " + mf.Ip)
 	comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
@@ -88,29 +88,27 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	comando := ""
-	nombre := "Debian" + strconv.Itoa(obtenerIdMV())
+	nombre := "Debian" + maquinaVirtual.NumeroNombre
 
 	switch maquinaVirtual.Solicitud {
 
 	case "start":
 		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
-		fmt.Println("START: " + comando)
+		fmt.Println(comando)
 		break
 
 	case "create":
 		fmt.Println(mf.BridgeAdapter)
 		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\Debian-Base2.vdi"`
-		fmt.Println("CREATE: " + comando)
 		break
 
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
-		fmt.Println("FINISH: " + comando)
+		fmt.Println(comando)
 		break
 
 	case "delete":
 		comando = "VBoxManage unregistervm " + maquinaVirtual.Nombre + " --delete"
-		fmt.Println("DELETE: " + comando)
 		break
 	}
 
@@ -157,13 +155,13 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 	fmt.Println(mf.Ip)
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
-		//fmt.Println("Error 1" + err.Error())
+		fmt.Println("Error 1" + err.Error())
 		return "Error: Fallo al dial " + err.Error()
 	}
 	defer client.Close()
 	session, err := client.NewSession()
 	if err != nil {
-		//fmt.Println("Error 2")
+		fmt.Println("Error 2" + err.Error())
 		return "Error: No se pudo crear la sesión"
 	}
 	defer session.Close()
@@ -173,7 +171,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 	errRun := session.Run(comando)
 
 	if errRun != nil {
-		//fmt.Println("Error 3")
+		fmt.Println("Error 3 " + err.Error())
 		return "Error: Falló al ejecutar: " + errRun.Error()
 	}
 
@@ -184,7 +182,9 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 
 func guardarVM(vm MaquinaVirtual) {
 	vm.Id = ""
-	jsonBody := []byte(`{"nombre":` + `"Debian` + strconv.Itoa(obtenerIdMV()) + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
+	fmt.Print("TIPOMV: ")
+	fmt.Println(vm.TipoMV)
+	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
@@ -246,6 +246,8 @@ func obtenerIdMV() int {
 	if derr != nil {
 		panic(derr)
 	}
+	fmt.Print("OBTENERIDMV: ")
+	fmt.Println(idMaquinaVirtual)
 	return idMaquinaVirtual + 1
 }
 
@@ -273,7 +275,7 @@ func asignar() MaquinaFisica {
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
 		fmt.Print(flag)
-		var respuesta string = sendSSH(mf, addr+`\known_hosts`, "C:/Users/espev/.ssh/id_rsa", "calc")
+		var respuesta string = sendSSH(mf, addr+`\known_hosts`, addr+`\id_rsa`, "calc")
 		//fmt.Println(addr)
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
