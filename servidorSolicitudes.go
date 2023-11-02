@@ -62,47 +62,6 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Handler que atenderá las solicitudes de creación de máquinas virtuales
-func solicitar(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-	flag := true
-	//Se envía la respuesta al cliente
-	fmt.Println(w.Header())
-
-	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		fmt.Printf("server: no se pudo leer el body: %s\n", err)
-	}
-
-	//Ciclo que nos permite escuchar el servidor para enviarle una Request
-	for flag {
-		//Se realiza la solicitud para saber si el servidor de procesamiento está disponible
-		res, err := http.Get("http://localhost:3333")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer res.Body.Close()
-		//Se obtiene la respuesta
-		body, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		//Se convierte la respuesta a boolean
-		valorBool, err := strconv.ParseBool(string(body))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		//Si el servidor de procesamiento está disponible, se envía la solicitud y se acaba el ciclo
-		if valorBool {
-			solicitud := reqBody
-			fmt.Fprintf(w, string(solicitarMV(solicitud)))
-			flag = false
-		}
-	}
-}
-
 func solicitarMV(request []byte) []byte {
 
 	bodyReader := bytes.NewReader(request)
@@ -145,21 +104,6 @@ func (q *Queue) Dequeue() ([]byte, error) {
 
 	return item, nil
 }
-func (q *Queue) pushInFront(item []byte) {
-
-	var newQueue Queue
-
-	newQueue.Enqueue(item)
-
-	for _, elemento := range *q {
-		newQueue.Enqueue(elemento)
-	}
-	*q = append(*q, item)
-
-	for _, elemento := range *q {
-		*q = append(*q, elemento)
-	}
-}
 
 func enableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
@@ -167,7 +111,7 @@ func enableCors(w *http.ResponseWriter) {
 
 func main() {
 	http.HandleFunc("/crearmv", handlercvm)
-	http.HandleFunc("/solicitud", solicitar)
+	http.HandleFunc("/solicitud", handlercvm)
 	fmt.Println("Servidor escuchando en el puerto :8000")
 	http.ListenAndServe(":8000", nil)
 }

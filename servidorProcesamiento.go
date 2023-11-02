@@ -47,7 +47,7 @@ type MaquinaFisica struct {
 
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
-
+	var mf MaquinaFisica
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
@@ -66,15 +66,22 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	if derr != nil {
 		panic(derr)
 	}
+	fmt.Print("REQUEST: ")
 	fmt.Println(request)
-	fmt.Println(asignar())
-	mf := asignar()
+	if strings.Compare(request.Solicitud, "create") == 0 {
+		guardarVM(request)
+		mf = asignar()
+	} else {
+		mf = obtenerMF(request.IdMF)
+	}
+
+	fmt.Println("IP MF: " + mf.Ip)
 	comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
 	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
-	guardarVM(request)
+
 	fmt.Fprintf(w, response)
 }
 
@@ -87,18 +94,24 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	case "start":
 		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
+		fmt.Println("START: " + comando)
 		break
 
 	case "create":
 		fmt.Println(mf.BridgeAdapter)
-		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm Debian --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm Debian --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm Debian --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl Debian --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach Debian --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\DiscoMulti.vdi"`
-		fmt.Println(comando)
+		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\Debian-Base2.vdi"`
+		fmt.Println("CREATE: " + comando)
+		break
 
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
+		fmt.Println("FINISH: " + comando)
+		break
 
 	case "delete":
 		comando = "VBoxManage unregistervm " + maquinaVirtual.Nombre + " --delete"
+		fmt.Println("DELETE: " + comando)
+		break
 	}
 
 	return comando
@@ -117,7 +130,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) string {
-	fmt.Println("Error ")
 	hostKeyCallback, err := knownhosts.New(addr)
 	if err != nil {
 		log.Fatal(err)
@@ -145,13 +157,13 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 	fmt.Println(mf.Ip)
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
-		fmt.Println("Error 1" + err.Error())
+		//fmt.Println("Error 1" + err.Error())
 		return "Error: Fallo al dial " + err.Error()
 	}
 	defer client.Close()
 	session, err := client.NewSession()
 	if err != nil {
-		fmt.Println("Error 2")
+		//fmt.Println("Error 2")
 		return "Error: No se pudo crear la sesión"
 	}
 	defer session.Close()
@@ -161,11 +173,11 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 	errRun := session.Run(comando)
 
 	if errRun != nil {
-		fmt.Println("Error 3")
+		//fmt.Println("Error 3")
 		return "Error: Falló al ejecutar: " + errRun.Error()
 	}
 
-	fmt.Println("TERMINA SSH")
+	//fmt.Println("TERMINA SSH")
 
 	return b.String()
 }
@@ -238,7 +250,7 @@ func obtenerIdMV() int {
 }
 
 func asignar() MaquinaFisica {
-
+	fmt.Println("SE LLAMA ASIGNAR")
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + `\.ssh`
 	mf := MaquinaFisica{}
@@ -256,13 +268,13 @@ func asignar() MaquinaFisica {
 	if derr != nil {
 		panic(derr)
 	}
-	fmt.Println(lista)
+	//fmt.Println(lista)
 	for flag {
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
-		fmt.Print(mf)
+		fmt.Print(flag)
 		var respuesta string = sendSSH(mf, addr+`\known_hosts`, "C:/Users/espev/.ssh/id_rsa", "calc")
-		fmt.Println(addr)
+		//fmt.Println(addr)
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
 			fmt.Println(respuesta)
@@ -274,7 +286,7 @@ func asignar() MaquinaFisica {
 
 func main() {
 
-	fmt.Println(obtenerIdMV())
+	//fmt.Println(obtenerIdMV())
 	flagAvailable = true
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/procSolic", handlervm)
