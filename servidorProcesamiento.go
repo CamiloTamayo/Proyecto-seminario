@@ -97,25 +97,30 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 		fmt.Println(comando)
 		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		//time.Sleep(120 * time.Second)
-		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
-		fmt.Println(comando2)
-		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
-		actualizarIP(strconv.Itoa(maquinaVirtual.Id), ip)
+		comandoIP := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
+		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoIP)
+		comandoHostname := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/OS/LoggedInUsersList"`
+		hostname := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoHostname)
+		actualizar(strconv.Itoa(maquinaVirtual.Id), ip, "ip")
+		actualizar(strconv.Itoa(maquinaVirtual.Id), hostname, "hostname")
 		break
 
 	case "create":
 		fmt.Println(mf.BridgeAdapter)
-		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\DiscoMulti.vdi"`
+		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
 		fmt.Println(comando)
 		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
-		fmt.Println(comando2)
-		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
-		actualizarIP(strconv.Itoa(maquinaVirtual.Id), ip)
+		comandoIP := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
+		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoIP)
+		comandoHostname := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/OS/LoggedInUsersList"`
+		hostname := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoHostname)
+		fmt.Println(hostname)
+		actualizar(strconv.Itoa(maquinaVirtual.Id), ip, "ip")
+		actualizar(strconv.Itoa(maquinaVirtual.Id), hostname, "hostname")
 		break
 
 	case "delete":
@@ -216,36 +221,29 @@ func guardarVM(vm MaquinaVirtual) {
 	fmt.Printf("client: response body: %s\n", resBody)
 }
 
-func actualizarIP(id string, ip string) {
+func actualizar(id string, cambio string, tipoCambio string) {
 
-	/*vmName := "MaqSDFebian clonar"
-
-	command := exec.Command("VBoxManage", "guestproperty", "get", vmName, "/VirtualBox/GuestInfo/Net/0/V4/IP")
-
-	output, err := command.CombinedOutput()
-	if err != nil {
-		fmt.Println("Error ejecutando el comando:", err)
-		return
-	}
-
-	outputString := string(output)*/
-	trimmedOutput := strings.TrimSpace(ip)
-
+	var req *http.Request
+	var error error
+	trimmedOutput := strings.TrimSpace(cambio)
 	fmt.Println(trimmedOutput)
-
 	pattern := `(\d+\.\d+\.\d+\.\d+)`
-
 	re := regexp.MustCompile(pattern)
-
 	match := re.FindString(trimmedOutput)
 
 	fmt.Println(match)
 	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
 	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
-	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
+
+	if tipoCambio == "ip" {
+		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
+	} else {
+		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmh", bytes.NewBuffer(jsonBody))
+	}
+
 	req.Header.Add("Content-Type", "application/json")
-	if err != nil {
-		fmt.Printf("client: could not create request: %s\n", err)
+	if error != nil {
+		fmt.Printf("client: could not create request: %s\n", error)
 		os.Exit(1)
 	}
 	res, err := http.DefaultClient.Do(req)
@@ -261,10 +259,6 @@ func actualizarIP(id string, ip string) {
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
-}
-
-func eliminarVM(vm MaquinaVirtual) {
-
 }
 
 func obtenerMF(idMF int) MaquinaFisica {
