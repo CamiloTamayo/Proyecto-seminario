@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -22,7 +23,7 @@ var flagAvailable bool
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
-	Id           string `json:"id"`
+	Id           int    `json:"id"`
 	Estado       string `json:"estado"`
 	Hostname     string `json:"hostname"`
 	IP           string `json:"ip"`
@@ -49,8 +50,6 @@ type MaquinaFisica struct {
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
 	var mf MaquinaFisica
-	serverUser, _ := user.Current()
-	addr := serverUser.HomeDir + "/.ssh"
 	//Se envía la respuesta al cliente
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
@@ -76,10 +75,9 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	} else {
 		mf = obtenerMF(request.IdMF)
 	}
-	comando := clasificar(request, mf)
 	request.IdMF = mf.Id
 	request.TipoMV = 1
-	sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+	clasificar(request, mf)
 	response := `{"idMF":"` + strconv.Itoa(request.IdMF) + `", "tipoMV":"` + strconv.Itoa(request.TipoMV) + `"}`
 
 	fmt.Fprintf(w, response)
@@ -89,26 +87,40 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	comando := ""
 	nombre := "Debian" + maquinaVirtual.NumeroNombre
+	serverUser, _ := user.Current()
+	addr := serverUser.HomeDir + "/.ssh"
 
 	switch maquinaVirtual.Solicitud {
 
 	case "start":
 		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
 		fmt.Println(comando)
+		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+		//time.Sleep(120 * time.Second)
+		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
+		fmt.Println(comando2)
+		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
+		actualizarIP(strconv.Itoa(maquinaVirtual.Id), ip)
 		break
 
 	case "create":
 		fmt.Println(mf.BridgeAdapter)
-		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\Debian-Base2.vdi"`
+		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\DiscoMulti.vdi"`
+		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
-
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
 		fmt.Println(comando)
+		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
+		fmt.Println(comando2)
+		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
+		actualizarIP(strconv.Itoa(maquinaVirtual.Id), ip)
 		break
 
 	case "delete":
 		comando = "VBoxManage unregistervm " + maquinaVirtual.Nombre + " --delete"
+		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
 	}
 
@@ -152,7 +164,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         0,
 	}
-	fmt.Println(mf.Ip)
+	fmt.Println(comando)
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
 		fmt.Println("Error 1" + err.Error())
@@ -175,13 +187,10 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 		return "Error: Falló al ejecutar: " + errRun.Error()
 	}
 
-	//fmt.Println("TERMINA SSH")
-
 	return b.String()
 }
 
 func guardarVM(vm MaquinaVirtual) {
-	vm.Id = ""
 	fmt.Print("TIPOMV: ")
 	fmt.Println(vm.TipoMV)
 	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
@@ -205,7 +214,53 @@ func guardarVM(vm MaquinaVirtual) {
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
+}
 
+func actualizarIP(id string, ip string) {
+
+	/*vmName := "MaqSDFebian clonar"
+
+	command := exec.Command("VBoxManage", "guestproperty", "get", vmName, "/VirtualBox/GuestInfo/Net/0/V4/IP")
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		fmt.Println("Error ejecutando el comando:", err)
+		return
+	}
+
+	outputString := string(output)*/
+	trimmedOutput := strings.TrimSpace(ip)
+
+	fmt.Println(trimmedOutput)
+
+	pattern := `(\d+\.\d+\.\d+\.\d+)`
+
+	re := regexp.MustCompile(pattern)
+
+	match := re.FindString(trimmedOutput)
+
+	fmt.Println(match)
+	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
+	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		fmt.Printf("client: could not create request: %s\n", err)
+		os.Exit(1)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("client: error making http request: %s\n", err)
+		os.Exit(1)
+	}
+
+	resBody, err := ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		fmt.Printf("client: could not read response body: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("client: response body: %s\n", resBody)
 }
 
 func eliminarVM(vm MaquinaVirtual) {
