@@ -225,19 +225,35 @@ func actualizar(id string, cambio string, tipoCambio string) {
 
 	var req *http.Request
 	var error error
-	trimmedOutput := strings.TrimSpace(cambio)
+	/*trimmedOutput := strings.TrimSpace(cambio)
 	fmt.Println(trimmedOutput)
 	pattern := `(\d+\.\d+\.\d+\.\d+)`
 	re := regexp.MustCompile(pattern)
 	match := re.FindString(trimmedOutput)
-
 	fmt.Println(match)
 	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
-	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
+	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)*/
 
 	if tipoCambio == "ip" {
+		trimmedOutput := strings.TrimSpace(cambio)
+		fmt.Println(trimmedOutput)
+		pattern := `(\d+\.\d+\.\d+\.\d+)`
+		re := regexp.MustCompile(pattern)
+		match := re.FindString(trimmedOutput)
+		fmt.Println(match)
+		fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
+		jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
 		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
 	} else {
+		hostnameWithPrefix := strings.TrimSpace(string(cambio))
+		parts := strings.Split(hostnameWithPrefix, ": ")
+		if len(parts) < 2 {
+			fmt.Println("No se pudo extraer el nombre de host.")
+			return
+		}
+		hostname := parts[1]
+		fmt.Println(`{"id":"` + id + `","cambio":"` + hostname + `"}`)
+		jsonBody := []byte(`{"id":"` + id + `","cambio":"` + hostname + `"}`)
 		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmh", bytes.NewBuffer(jsonBody))
 	}
 
