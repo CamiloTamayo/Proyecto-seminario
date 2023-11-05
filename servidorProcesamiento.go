@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -45,6 +46,10 @@ type MaquinaFisica struct {
 	Os            string   `json:"os"`
 	BridgeAdapter string   `json:"bridgeAdapter"`
 	Maquinas      []string `json:"maquinas"`
+}
+
+type HostName struct {
+	Nombre string `json:"nombre"`
 }
 
 // Función para atender las solicitudes de creación de máquinas virtuales
@@ -95,14 +100,14 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 	case "start":
 		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
 		fmt.Println(comando)
-		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-		//time.Sleep(120 * time.Second)
+		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+		time.Sleep(120 * time.Second)
 		comandoIP := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
 		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoIP)
-		comandoHostname := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/OS/LoggedInUsersList"`
-		hostname := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoHostname)
+		//comandoHostname := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/OS/LoggedInUsersList"`
+		//hostname := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoHostname)
 		actualizar(strconv.Itoa(maquinaVirtual.Id), ip, "ip")
-		actualizar(strconv.Itoa(maquinaVirtual.Id), hostname, "hostname")
+		//actualizar(strconv.Itoa(maquinaVirtual.Id), hostname, "hostname")
 		break
 
 	case "create":
@@ -110,17 +115,11 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
+
 	case "finish":
-		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff" //+ request.Nombre + " poweroff"
+		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff"
 		fmt.Println(comando)
-		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-		comandoIP := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
-		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoIP)
-		comandoHostname := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/OS/LoggedInUsersList"`
-		hostname := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoHostname)
-		fmt.Println(hostname)
-		actualizar(strconv.Itoa(maquinaVirtual.Id), ip, "ip")
-		actualizar(strconv.Itoa(maquinaVirtual.Id), hostname, "hostname")
+		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
 
 	case "delete":
@@ -198,7 +197,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 func guardarVM(vm MaquinaVirtual) {
 	fmt.Print("TIPOMV: ")
 	fmt.Println(vm.TipoMV)
-	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + vm.Hostname + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
+	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser": ` + strconv.Itoa(vm.IdUser) + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF": ` + strconv.Itoa(vm.IdMF) + `}`)
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
@@ -225,39 +224,19 @@ func actualizar(id string, cambio string, tipoCambio string) {
 
 	var req *http.Request
 	var error error
-	/*trimmedOutput := strings.TrimSpace(cambio)
+
+	trimmedOutput := strings.TrimSpace(cambio)
 	fmt.Println(trimmedOutput)
 	pattern := `(\d+\.\d+\.\d+\.\d+)`
 	re := regexp.MustCompile(pattern)
 	match := re.FindString(trimmedOutput)
 	fmt.Println(match)
 	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
-	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)*/
 
-	if tipoCambio == "ip" {
-		trimmedOutput := strings.TrimSpace(cambio)
-		fmt.Println(trimmedOutput)
-		pattern := `(\d+\.\d+\.\d+\.\d+)`
-		re := regexp.MustCompile(pattern)
-		match := re.FindString(trimmedOutput)
-		fmt.Println(match)
-		fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
-		jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
-		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
-	} else {
-		hostnameWithPrefix := strings.TrimSpace(string(cambio))
-		parts := strings.Split(hostnameWithPrefix, ": ")
-		if len(parts) < 2 {
-			fmt.Println("No se pudo extraer el nombre de host.")
-			return
-		}
-		hostname := parts[1]
-		fmt.Println(`{"id":"` + id + `","cambio":"` + hostname + `"}`)
-		jsonBody := []byte(`{"id":"` + id + `","cambio":"` + hostname + `"}`)
-		req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmh", bytes.NewBuffer(jsonBody))
-	}
-
+	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
+	req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
+
 	if error != nil {
 		fmt.Printf("client: could not create request: %s\n", error)
 		os.Exit(1)
@@ -296,24 +275,23 @@ func obtenerMF(idMF int) MaquinaFisica {
 	return mf
 }
 
-func obtenerIdMV() int {
-	requestURL := fmt.Sprintf("http://localhost:8080/api/obtenerMayor")
+func obtenerHostName(id int) string {
+	requestURL := fmt.Sprintf("http://localhost:8080/api/getHostname/%d", id)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
 		os.Exit(1)
 	}
 	resBody, err := ioutil.ReadAll(res.Body)
+	//Se crea una variable tipo request en la cual se guardarán los datos del Json
+	hostname := HostName{}
 
-	var idMaquinaVirtual int
-
-	derr := json.Unmarshal(resBody, &idMaquinaVirtual)
+	//Se decodifica el objeto Json y se guarda en la variable request
+	derr := json.Unmarshal(resBody, &hostname)
 	if derr != nil {
 		panic(derr)
 	}
-	fmt.Print("OBTENERIDMV: ")
-	fmt.Println(idMaquinaVirtual)
-	return idMaquinaVirtual + 1
+	return hostname.Nombre
 }
 
 func asignar() MaquinaFisica {
