@@ -15,24 +15,22 @@ type Queue []([]byte)
 
 var myQueue Queue
 
-const ipSolic = "10.0.48.216"
-const ipProc = "10.0.48.216"
-const ipWEB = "10.0.48.216"
+const ipSolic = "192.168.1.40"
+const ipProc = "192.168.1.40"
+const ipWEB = "192.168.1.40"
 const serverPort = 3333
 
 // Handler que atenderá las solicitudes de creación de máquinas virtuales
 func handlercvm(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
+	enableCors(&w, r)
 	flag := true
 	//Se envía la respuesta al cliente
-	fmt.Println(w.Header())
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Printf("server: no se pudo leer el body: %s\n", err)
 	}
-	fmt.Println(bytes.NewReader(reqBody))
 
 	//Agrega un elemento a la cola
 	myQueue.Enqueue(reqBody)
@@ -108,13 +106,18 @@ func (q *Queue) Dequeue() ([]byte, error) {
 	return item, nil
 }
 
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "http://"+ipWEB+":4200")
+func enableCors(w *http.ResponseWriter, r *http.Request) {
+	switch host := r.Header.Get("Origin"); host {
+	case "http://localhost:4200":
+		(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+		break
+	case "http://" + ipWEB + ":4200":
+		(*w).Header().Set("Access-Control-Allow-Origin", "http://"+ipWEB+":4200")
+	}
 }
 
 func main() {
 	http.HandleFunc("/crearmv", handlercvm)
 	http.HandleFunc("/solicitud", handlercvm)
-	fmt.Println("Servidor escuchando en el puerto :8000")
 	http.ListenAndServe(ipSolic+":8000", nil)
 }
