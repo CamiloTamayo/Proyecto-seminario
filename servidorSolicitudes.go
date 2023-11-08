@@ -15,6 +15,9 @@ type Queue []([]byte)
 
 var myQueue Queue
 
+const ipSolic = "10.0.48.216"
+const ipProc = "10.0.48.216"
+const ipWEB = "10.0.48.216"
 const serverPort = 3333
 
 // Handler que atenderá las solicitudes de creación de máquinas virtuales
@@ -37,7 +40,7 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 	//Ciclo que nos permite escuchar el servidor para enviarle una Request
 	for flag {
 		//Se realiza la solicitud para saber si el servidor de procesamiento está disponible
-		res, err := http.Get("http://localhost:3333")
+		res, err := http.Get("http://" + ipProc + ":3333")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -65,7 +68,7 @@ func handlercvm(w http.ResponseWriter, r *http.Request) {
 func solicitarMV(request []byte) []byte {
 
 	bodyReader := bytes.NewReader(request)
-	requestURL := fmt.Sprintf("http://localhost:%d/procSolic", serverPort)
+	requestURL := fmt.Sprintf("http://"+ipProc+":%d/procSolic", serverPort)
 	req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
 	if err != nil {
 		fmt.Printf("client: could not create request: %s\n", err)
@@ -106,12 +109,12 @@ func (q *Queue) Dequeue() ([]byte, error) {
 }
 
 func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+	(*w).Header().Set("Access-Control-Allow-Origin", "http://"+ipWEB+":4200")
 }
 
 func main() {
 	http.HandleFunc("/crearmv", handlercvm)
 	http.HandleFunc("/solicitud", handlercvm)
 	fmt.Println("Servidor escuchando en el puerto :8000")
-	http.ListenAndServe(":8000", nil)
+	http.ListenAndServe(ipSolic+":8000", nil)
 }

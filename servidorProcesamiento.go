@@ -22,6 +22,9 @@ import (
 // Variable que nos indica que el servidor se encuentra libre
 var flagAvailable bool
 
+const ipServer = "10.0.48.216"
+const ipApi = "10.0.48.216"
+
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
 	Id           int    `json:"id"`
@@ -199,7 +202,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 func guardarVM(vm MaquinaVirtual) {
 	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `","estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF":"` + strconv.Itoa(vm.IdMF) + `"}`)
 	fmt.Println(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF":"` + strconv.Itoa(vm.IdMF) + `"}`)
-	req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/api/savevm", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest(http.MethodPost, "http://"+ipApi+":8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
 		fmt.Printf("client: could not create request: %s\n", err)
@@ -234,7 +237,7 @@ func actualizar(id string, cambio string, tipoCambio string) {
 	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
 
 	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
-	req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevmi", bytes.NewBuffer(jsonBody))
+	req, error = http.NewRequest(http.MethodPost, "http://"+ipApi+":8080/api/updatevmi", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 
 	if error != nil {
@@ -262,7 +265,7 @@ func actualizarEstado(id string, estado string) string {
 	var error error
 
 	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + estado + `"}`)
-	req, error = http.NewRequest(http.MethodPost, "http://localhost:8080/api/updatevms", bytes.NewBuffer(jsonBody))
+	req, error = http.NewRequest(http.MethodPost, "http://"+ipApi+":8080/api/updatevms", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 
 	if error != nil {
@@ -292,7 +295,7 @@ func actualizarEstado(id string, estado string) string {
 }
 
 func obtenerMF(idMF int) MaquinaFisica {
-	requestURL := fmt.Sprintf("http://localhost:8080/api/getmf/%d", idMF)
+	requestURL := fmt.Sprintf("http://"+ipApi+":8080/api/getmf/%d", idMF)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
@@ -311,7 +314,7 @@ func obtenerMF(idMF int) MaquinaFisica {
 }
 
 func obtenerHostName(id int) string {
-	requestURL := fmt.Sprintf("http://localhost:8080/api/getHostname/%d", id)
+	requestURL := fmt.Sprintf("http://"+ipApi+":8080/api/getHostname/%d", id)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
@@ -335,7 +338,7 @@ func asignar() MaquinaFisica {
 	addr := serverUser.HomeDir + `\.ssh`
 	mf := MaquinaFisica{}
 	var flag bool = true
-	requestURL := fmt.Sprintf("http://localhost:8080/api/getmfs")
+	requestURL := fmt.Sprintf("http://" + ipApi + ":8080/api/getmfs")
 	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
@@ -353,7 +356,7 @@ func asignar() MaquinaFisica {
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
 		fmt.Print(flag)
-		var respuesta string = sendSSH(mf, addr+`\known_hosts`, addr+`\id_rsa`, "calc")
+		var respuesta string = sendSSH(mf, addr+`\known_hosts`, addr+`\id_rsa`, "")
 		//fmt.Println(addr)
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
@@ -365,11 +368,9 @@ func asignar() MaquinaFisica {
 }
 
 func main() {
-
-	//fmt.Println(obtenerIdMV())
 	flagAvailable = true
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/procSolic", handlervm)
 	fmt.Println("Servidor escuchando en el puerto :3333")
-	http.ListenAndServe(":3333", nil)
+	http.ListenAndServe(ipServer+":3333", nil)
 }
