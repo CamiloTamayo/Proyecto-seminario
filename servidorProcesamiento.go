@@ -22,8 +22,11 @@ import (
 // Variable que nos indica que el servidor se encuentra libre
 var flagAvailable bool
 
-const ipServer = "10.0.48.216"
-const ipApi = "10.0.48.216"
+//const ipServer = "10.0.48.216"
+//const ipApi = "10.0.48.216"
+
+const ipServer = "192.168.1.9"
+const ipApi = "192.168.1.9"
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
@@ -115,9 +118,17 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 		break
 
 	case "create":
-		fmt.Println(mf.BridgeAdapter)
-		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
-		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+
+		switch maquinaVirtual.TipoMV {
+		case 1:
+			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
+			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+			break
+		case 2:
+			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 4 --memory 2048 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
+			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+			break
+		}
 		break
 
 	case "finish":
