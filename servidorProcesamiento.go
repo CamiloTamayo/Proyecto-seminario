@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -21,12 +22,13 @@ import (
 
 // Variable que nos indica que el servidor se encuentra libre
 var flagAvailable bool
+var mu sync.Mutex
 
 //const ipServer = "10.0.48.216"
 //const ipApi = "10.0.48.216"
 
-const ipServer = "192.168.1.9"
-const ipApi = "192.168.1.9"
+const ipServer = "192.168.1.40"
+const ipApi = "192.168.1.40"
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
@@ -55,6 +57,10 @@ type MaquinaFisica struct {
 	Maquinas      []string `json:"maquinas"`
 }
 
+type IP struct {
+	Ip string `json:"ip"`
+}
+
 type HostName struct {
 	Nombre string `json:"nombre"`
 }
@@ -78,8 +84,6 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	if derr != nil {
 		panic(derr)
 	}
-	fmt.Print("REQUEST: ")
-	fmt.Println(request)
 	if strings.Compare(request.Solicitud, "create") == 0 {
 		mf = asignar()
 		request.IdMF = mf.Id
@@ -88,7 +92,6 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		mf = obtenerMF(request.IdMF)
 	}
 	request.IdMF = mf.Id
-	request.TipoMV = 1
 	estado := clasificar(request, mf)
 	response := `{"estado":"` + estado + `"}`
 
@@ -106,13 +109,22 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 	switch maquinaVirtual.Solicitud {
 
 	case "start":
+		var ip string = ""
 		comando = "VBoxManage startvm " + maquinaVirtual.Nombre //+ request.Nombre
-		fmt.Println(comando)
 		actualizarEstado(strconv.Itoa(maquinaVirtual.Id), "Procesando")
+		mu.Lock()
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-		time.Sleep(120 * time.Second)
-		comandoIP := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "/VirtualBox/GuestInfo/Net/0/V4/IP"`
-		ip := sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comandoIP)
+		mu.Unlock()
+		//time.Sleep(2 * time.Second)
+		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "VMIP"`
+		for true {
+			ip = sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
+			if strings.Contains(ip, "No") {
+				time.Sleep(2 * time.Second)
+			} else {
+				break
+			}
+		}
 		actualizar(strconv.Itoa(maquinaVirtual.Id), ip, "ip")
 		estado = actualizarEstado(strconv.Itoa(maquinaVirtual.Id), "Iniciada")
 		break
@@ -133,7 +145,6 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 
 	case "finish":
 		comando = "VBoxManage controlvm " + maquinaVirtual.Nombre + " poweroff"
-		fmt.Println(comando)
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		estado = actualizarEstado(strconv.Itoa(maquinaVirtual.Id), "Apagada")
 		break
@@ -184,16 +195,14 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         0,
 	}
-	fmt.Println(comando)
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
 	if err != nil {
-		fmt.Println("Error 1" + err.Error())
+
 		return "Error: Fallo al dial " + err.Error()
 	}
 	defer client.Close()
 	session, err := client.NewSession()
 	if err != nil {
-		fmt.Println("Error 2" + err.Error())
 		return "Error: No se pudo crear la sesión"
 	}
 	defer session.Close()
@@ -201,34 +210,27 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 	var b bytes.Buffer
 	session.Stdout = &b
 	errRun := session.Run(comando)
-	fmt.Println("COMANDO SSH: " + comando)
 	if errRun != nil {
-		fmt.Println("Error 3 " + err.Error())
-		return "Error: Falló al ejecutar: " + errRun.Error()
+		return "Error: Falló al ejecutar: "
 	}
-
 	return b.String()
 }
 
 func guardarVM(vm MaquinaVirtual) {
 	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `","estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF":"` + strconv.Itoa(vm.IdMF) + `"}`)
-	fmt.Println(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `,"estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF":"` + strconv.Itoa(vm.IdMF) + `"}`)
 	req, err := http.NewRequest(http.MethodPost, "http://"+ipApi+":8080/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
-		fmt.Printf("client: could not create request: %s\n", err)
 		os.Exit(1)
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Printf("client: error making http request: %s\n", err)
 		os.Exit(1)
 	}
 
 	resBody, err := ioutil.ReadAll(res.Body)
 
 	if err != nil {
-		fmt.Printf("client: could not read response body: %s\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("client: response body: %s\n", resBody)
@@ -240,31 +242,25 @@ func actualizar(id string, cambio string, tipoCambio string) {
 	var error error
 
 	trimmedOutput := strings.TrimSpace(cambio)
-	fmt.Println(trimmedOutput)
 	pattern := `(\d+\.\d+\.\d+\.\d+)`
 	re := regexp.MustCompile(pattern)
 	match := re.FindString(trimmedOutput)
-	fmt.Println(match)
-	fmt.Println(`{"id":"` + id + `","cambio":"` + match + `"}`)
 
 	jsonBody := []byte(`{"id":"` + id + `","cambio":"` + match + `"}`)
 	req, error = http.NewRequest(http.MethodPost, "http://"+ipApi+":8080/api/updatevmi", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 
 	if error != nil {
-		fmt.Printf("client: could not create request: %s\n", error)
 		os.Exit(1)
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Printf("client: error making http request: %s\n", err)
 		os.Exit(1)
 	}
 
 	resBody, err := ioutil.ReadAll(res.Body)
 
 	if err != nil {
-		fmt.Printf("client: could not read response body: %s\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("client: response body: %s\n", resBody)
@@ -280,19 +276,16 @@ func actualizarEstado(id string, estado string) string {
 	req.Header.Add("Content-Type", "application/json")
 
 	if error != nil {
-		fmt.Printf("client: could not create request: %s\n", error)
 		os.Exit(1)
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Printf("client: error making http request: %s\n", err)
 		os.Exit(1)
 	}
 
 	resBody, err := ioutil.ReadAll(res.Body)
 
 	if err != nil {
-		fmt.Printf("client: could not read response body: %s\n", err)
 		os.Exit(1)
 	}
 	estadoRqst := HostName{}
@@ -301,7 +294,6 @@ func actualizarEstado(id string, estado string) string {
 	if derr != nil {
 		panic(derr)
 	}
-	fmt.Println(estadoRqst.Nombre)
 	return estadoRqst.Nombre
 }
 
@@ -309,7 +301,6 @@ func obtenerMF(idMF int) MaquinaFisica {
 	requestURL := fmt.Sprintf("http://"+ipApi+":8080/api/getmf/%d", idMF)
 	res, err := http.Get(requestURL)
 	if err != nil {
-		fmt.Printf("error making http request: %s\n", err)
 		os.Exit(1)
 	}
 	resBody, err := ioutil.ReadAll(res.Body)
@@ -344,7 +335,6 @@ func obtenerHostName(id int) string {
 }
 
 func asignar() MaquinaFisica {
-	fmt.Println("SE LLAMA ASIGNAR")
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + `\.ssh`
 	mf := MaquinaFisica{}
@@ -357,21 +347,16 @@ func asignar() MaquinaFisica {
 	}
 	resBody, err := ioutil.ReadAll(res.Body)
 	lista := []MaquinaFisica{}
-
 	derr := json.Unmarshal(resBody, &lista)
 	if derr != nil {
 		panic(derr)
 	}
-	//fmt.Println(lista)
 	for flag {
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
-		fmt.Print(flag)
 		var respuesta string = sendSSH(mf, addr+`\known_hosts`, addr+`\id_rsa`, "")
-		//fmt.Println(addr)
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
-			fmt.Println(respuesta)
 		}
 	}
 
@@ -382,6 +367,5 @@ func main() {
 	flagAvailable = true
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/procSolic", handlervm)
-	fmt.Println("Servidor escuchando en el puerto :3333")
 	http.ListenAndServe(ipServer+":3333", nil)
 }

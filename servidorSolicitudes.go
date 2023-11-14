@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +14,10 @@ import (
 // Se declara la estructura tipo cola para guardar las solicitudes
 type Queue []([]byte)
 
+type Solicitud struct {
+	Solicitud string `json:"solicitud"`
+}
+
 var myQueue Queue
 
 const ipSolic = "192.168.1.40"
@@ -23,14 +28,20 @@ const serverPort = 3333
 // Handler que atenderá las solicitudes de creación de máquinas virtuales
 func handlercvm(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w, r)
-	flag := true
-	//Se envía la respuesta al cliente
-
-	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Printf("server: no se pudo leer el body: %s\n", err)
 	}
+	//Se crea una variable tipo request en la cual se guardarán los datos del Json
+	request := Solicitud{}
+
+	//Se decodifica el objeto Json y se guarda en la variable request
+	derr := json.Unmarshal(reqBody, &request)
+	if derr != nil {
+		panic(derr)
+	}
+	flag := true
+	fmt.Println("SOLICITUD: " + request.Solicitud)
 
 	//Agrega un elemento a la cola
 	myQueue.Enqueue(reqBody)
@@ -116,8 +127,14 @@ func enableCors(w *http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func printEcho(w http.ResponseWriter, r *http.Request) {
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	fmt.Println(reqBody)
+}
+
 func main() {
 	http.HandleFunc("/crearmv", handlercvm)
 	http.HandleFunc("/solicitud", handlercvm)
+	http.HandleFunc("/", printEcho)
 	http.ListenAndServe(ipSolic+":8000", nil)
 }
