@@ -29,6 +29,8 @@ var mu sync.Mutex
 
 const ipServer = "192.168.1.40"
 const ipApi = "192.168.1.40"
+const serverPort = "8000"
+const ipWEB = "192.168.1.40"
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
@@ -67,8 +69,8 @@ type HostName struct {
 
 // Función para atender las solicitudes de creación de máquinas virtuales
 func handlervm(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w, r)
 	var mf MaquinaFisica
-	//Se envía la respuesta al cliente
 
 	//Se lee el cuerpo de la solicitud y en caso de no poder leerlo, se imprime el error
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -91,6 +93,7 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	} else {
 		mf = obtenerMF(request.IdMF)
 	}
+	fmt.Println(mf.Ip)
 	request.IdMF = mf.Id
 	estado := clasificar(request, mf)
 	response := `{"estado":"` + estado + `"}`
@@ -105,7 +108,7 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 	nombre := "Debian" + maquinaVirtual.NumeroNombre
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + "/.ssh"
-
+	fmt.Println(maquinaVirtual.Solicitud)
 	switch maquinaVirtual.Solicitud {
 
 	case "start":
@@ -253,7 +256,9 @@ func actualizar(id string, cambio string, tipoCambio string) {
 	if error != nil {
 		os.Exit(1)
 	}
+
 	res, err := http.DefaultClient.Do(req)
+
 	if err != nil {
 		os.Exit(1)
 	}
@@ -355,17 +360,27 @@ func asignar() MaquinaFisica {
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
 		var respuesta string = sendSSH(mf, addr+`\known_hosts`, addr+`\id_rsa`, "")
+		fmt.Println(respuesta)
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
 		}
 	}
-
 	return mf
+}
+
+func enableCors(w *http.ResponseWriter, r *http.Request) {
+	switch host := r.Header.Get("Origin"); host {
+	case "http://localhost:4200":
+		(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+		break
+	case "http://" + ipWEB + ":4200":
+		(*w).Header().Set("Access-Control-Allow-Origin", "http://"+ipWEB+":4200")
+	}
 }
 
 func main() {
 	flagAvailable = true
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/procSolic", handlervm)
-	http.ListenAndServe(ipServer+":3333", nil)
+	http.ListenAndServe(ipServer+":"+serverPort, nil)
 }
