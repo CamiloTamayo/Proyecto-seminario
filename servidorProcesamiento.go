@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // Variable y constantes globales
@@ -89,6 +88,7 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		pattern := `(\d+\.\d+\.\d+\.\d+)`
 		re := regexp.MustCompile(pattern)
 		match := re.FindString(trimmedOutput)
+		fmt.Println(match)
 		mf, isHere = asignar(match)
 		if isHere {
 			request.TipoMV = 0
@@ -137,7 +137,7 @@ func asignar(ip string) (MaquinaFisica, bool) {
 	}
 
 	for _, mfisica := range lista {
-		if ip == mf.Ip {
+		if ip == mfisica.Ip {
 			isHere = true
 			mf = mfisica
 			fmt.Println("HEREEEEE")
@@ -261,15 +261,15 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 }
 
 func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) string {
-	hostKeyCallback, err := knownhosts.New(addr)
+	/*hostKeyCallback, err := knownhosts.New(addr)
 	if err != nil {
 		log.Printf("Error: %v", err)
-	}
+	}*/
 	file := addrKey
 	key, errFile := ioutil.ReadFile(file)
 
 	if errFile != nil {
-		log.Printf("Error: No se pudo leer la llave privada: %v", err)
+		log.Printf("Error: No se pudo leer la llave privada: %v", errFile)
 	}
 
 	signer, errSecond := ssh.ParsePrivateKey(key)
@@ -282,7 +282,7 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: hostKeyCallback,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         0,
 	}
 	client, err := ssh.Dial("tcp", mf.Ip+":22", config)
