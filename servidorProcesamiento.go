@@ -68,7 +68,7 @@ type AppConfig struct {
 // Función para atender las solicitudes entrantes
 func handlervm(w http.ResponseWriter, r *http.Request) {
 	var mf MaquinaFisica
-
+	var isHere bool = false
 	enableCors(&w, r)
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -85,7 +85,14 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.Compare(request.Solicitud, "create") == 0 {
-		mf = asignar()
+		trimmedOutput := strings.TrimSpace(r.RemoteAddr)
+		pattern := `(\d+\.\d+\.\d+\.\d+)`
+		re := regexp.MustCompile(pattern)
+		match := re.FindString(trimmedOutput)
+		mf, isHere = asignar(match)
+		if isHere {
+			request.TipoMV = 0
+		}
 		request.IdMF = mf.Id
 		guardarVM(request)
 	} else {
@@ -93,7 +100,7 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		request.IdMF = mf.Id
 	}
 
-	estado := clasificar(request, mf)
+	estado := clasificar(request, mf, isHere)
 	response := `{"estado":"` + estado + `"}`
 	fmt.Fprintf(w, response)
 }
@@ -110,11 +117,12 @@ func enableCors(w *http.ResponseWriter, r *http.Request) {
 }
 
 // Función de asignación de una máquina física para las solicitudes de creación de VMs
-func asignar() MaquinaFisica {
+func asignar(ip string) (MaquinaFisica, bool) {
+	var flag bool = true
+	var isHere bool = false
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + `/.ssh`
 	mf := MaquinaFisica{}
-	var flag bool = true
 	requestURL := fmt.Sprintf(ipApi + "/api/getmfs")
 	res, err := http.Get(requestURL)
 	if err != nil {
@@ -127,7 +135,17 @@ func asignar() MaquinaFisica {
 	if derr != nil {
 		log.Printf("Error: %v", derr)
 	}
-	for flag {
+
+	for _, mfisica := range lista {
+		if ip == mf.Ip {
+			isHere = true
+			mf = mfisica
+			fmt.Println("HEREEEEE")
+		}
+	}
+
+	for flag && !isHere {
+		fmt.Println("NOT HEREEEEE")
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
 		var respuesta string = sendSSH(mf, addr+`/known_hosts`, addr+`/id_rsa`, "")
@@ -135,7 +153,7 @@ func asignar() MaquinaFisica {
 			flag = false
 		}
 	}
-	return mf
+	return mf, isHere
 }
 
 /*
@@ -178,7 +196,7 @@ func obtenerMF(idMF int) MaquinaFisica {
 	return mf
 }
 
-func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
+func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) string {
 
 	comando := ""
 	estado := ""
@@ -211,12 +229,16 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica) string {
 	case "create":
 
 		switch maquinaVirtual.TipoMV {
+		case 0:
+			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre
+			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+			break
 		case 1:
-			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
+			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre + " --type headless"
 			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 			break
 		case 2:
-			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 4 --memory 2048 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi"`
+			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 4 --memory 2048 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre + " --type headless"
 			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 			break
 		}
@@ -394,7 +416,7 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 	leerIPs()
-	fmt.Println(ipServer)
+	fmt.Println("Escuchando en: " + ipServer)
 	http.HandleFunc("/procSolic", handlervm)
 	log.Fatal(http.ListenAndServe(ipServer, nil))
 }
