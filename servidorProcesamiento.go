@@ -206,7 +206,7 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 
 	comando := ""
 	estado := ""
-	nombre := "Debian" + maquinaVirtual.NumeroNombre
+	nombre := "MaquinaVirtual" + maquinaVirtual.NumeroNombre
 	serverUser, _ := user.Current()
 	addr := serverUser.HomeDir + "/.ssh"
 	fmt.Println(maquinaVirtual.Solicitud)
@@ -214,14 +214,20 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 
 	case "start":
 		var ip string = ""
-		comando = "VBoxManage startvm " + maquinaVirtual.Nombre + " --type headless"
+		fmt.Println("ENTRA START "+ nombre )
+		fmt.Println("ENTRA START "+ nombre )
+		comando = "VBoxManage startvm " + nombre 
+		if !isHere{
+			comando += " --type headless"
+		}
 		actualizarEstado(strconv.Itoa(maquinaVirtual.Id), "Procesando")
 		mu.Lock()
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		mu.Unlock()
-		comando2 := `VBoxManage guestproperty get "` + maquinaVirtual.Nombre + `" "VMIP"`
+		comando2 := `VBoxManage guestproperty get "` + nombre + `" "VMIP"`
 		for true {
 			ip = sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando2)
+			fmt.Println(ip)
 			if strings.Contains(ip, "No") {
 				time.Sleep(2 * time.Second)
 			} else {
@@ -235,9 +241,10 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 	case "create":
 		var caracteristicas Caracteristicas = obtenerTipoMaquina(maquinaVirtual.TipoMV)
 		var disco = maquinaVirtual.NombreDisco
-		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Linux --register & VBoxManage modifyvm  ` + nombre + ` --cpus ` + strconv.Itoa(caracteristicas.Cpu) + ` --memory ` + strconv.Itoa(caracteristicas.Ram) + ` --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\` + disco + `.vdi" & VBoxManage startvm ` + nombre
-		fmt.Println(comando)
-		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+		comando = `VBoxManage createvm --name ` + nombre + ` --register & VBoxManage modifyvm  ` + nombre + ` --cpus ` + strconv.Itoa(caracteristicas.Cpu) + ` --memory ` + strconv.Itoa(caracteristicas.Ram) + ` --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\` + disco + `.vdi"`
+		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
+		maquinaVirtual.Solicitud = "start"
+		clasificar(maquinaVirtual, mf, isHere)
 		break
 
 	case "finish":
@@ -257,10 +264,6 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 }
 
 func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) string {
-	/*hostKeyCallback, err := knownhosts.New(addr)
-	if err != nil {
-		log.Printf("Error: %v", err)
-	}*/
 	file := addrKey
 	key, errFile := ioutil.ReadFile(file)
 
@@ -293,12 +296,11 @@ func sendSSH(mf MaquinaFisica, addr string, addrKey string, comando string) stri
 		return "Error: No se pudo crear la sesión"
 	}
 	defer session.Close()
-
 	var b bytes.Buffer
 	session.Stdout = &b
 	errRun := session.Run(comando)
 	if errRun != nil {
-		log.Printf("Error: Fallo al ejecutar instruccion ssh: %v", err)
+		log.Printf("Error: Fallo al ejecutar instruccion ssh: %v", errRun)
 		return "Error: Falló al ejecutar: "
 	}
 	return b.String()
