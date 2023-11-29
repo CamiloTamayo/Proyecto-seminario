@@ -99,7 +99,10 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(match)
 		mf, isHere = asignar(match)
 		request.IdMF = mf.Id
-		guardarVM(request)
+		newvm := guardarVM(request)
+		time.Sleep(4 * time.Second)
+		fmt.Println(newvm.Id)
+		request.Id = newvm.Id
 	} else {
 		mf = obtenerMF(request.IdMF)
 		request.IdMF = mf.Id
@@ -166,7 +169,7 @@ func asignar(ip string) (MaquinaFisica, bool) {
 Esta función tiene como propósito principal almacenar una máquina virtual en la base de datos de la plataforma Desktop Cloud.
 Recibe como parámetro la máquina virtual a almacenar.
 */
-func guardarVM(vm MaquinaVirtual) {
+func guardarVM(vm MaquinaVirtual) MaquinaVirtual{
 	jsonBody := []byte(`{"nombre":` + `"MaquinaVirtual` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":""` + `,"idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `","estado":"` + vm.Estado + `","tipoMV":"` + vm.TipoMV + `","idMF":"` + strconv.Itoa(vm.IdMF) + `","os":"` + strconv.Itoa(vm.SistemaOperativo) + `"}`)
 	req, err := http.NewRequest(http.MethodPost, ipApi+"/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
@@ -183,7 +186,14 @@ func guardarVM(vm MaquinaVirtual) {
 	if err != nil {
 		log.Printf("Error: %v", err)
 	}
-	fmt.Printf("client: response body: %s\n", resBody)
+	fmt.Printf("client: response body GUARDARVM: %s\n", resBody)
+	vmreturn := MaquinaVirtual{}
+	derr := json.Unmarshal(resBody, &vmreturn)
+	if derr != nil {
+		log.Printf("Error: %v", err)
+	}
+	fmt.Println(vmreturn)
+	return vmreturn
 }
 
 // Función para obtener una máquina física de la base de datos dado su ID.
@@ -214,12 +224,15 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 
 	case "start":
 		var ip string = ""
-		fmt.Println("ENTRA START "+ nombre )
-		fmt.Println("ENTRA START "+ nombre )
+		fmt.Println("ENTRA START "+ strconv.FormatBool(isHere) )
+		fmt.Println("ENTRA START "+ strconv.Itoa(maquinaVirtual.Id) )
 		comando = "VBoxManage startvm " + nombre 
 		if !isHere{
 			comando += " --type headless"
+		}else{
+			comando += " --type gui"
 		}
+		fmt.Println("ENTRA START "+ comando )
 		actualizarEstado(strconv.Itoa(maquinaVirtual.Id), "Procesando")
 		mu.Lock()
 		sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
