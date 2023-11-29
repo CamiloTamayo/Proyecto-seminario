@@ -29,17 +29,19 @@ var ipWEB = ""
 
 // Estructura que se utilizará como plantilla para la decodificación de las requests
 type MaquinaVirtual struct {
-	Id           int    `json:"id"`
-	Estado       string `json:"estado"`
-	Hostname     string `json:"hostname"`
-	IP           string `json:"ip"`
-	Nombre       string `json:"nombre"`
-	IdMF         int    `json:"idMF"`
-	IdUser       int    `json:"idUser"`
-	Contrasenia  string `json:"contrasenia"`
-	TipoMV       int    `json:"tipoMV"`
-	Solicitud    string `json:"solicitud"`
-	NumeroNombre string `json:"numeroNombre"`
+	Id               int    `json:"id"`
+	Estado           string `json:"estado"`
+	Hostname         string `json:"hostname"`
+	IP               string `json:"ip"`
+	Nombre           string `json:"nombre"`
+	IdMF             int    `json:"idMF"`
+	IdUser           int    `json:"idUser"`
+	Contrasenia      string `json:"contrasenia"`
+	TipoMV           string `json:"tipoMV"`
+	Solicitud        string `json:"solicitud"`
+	NumeroNombre     string `json:"numeroNombre"`
+	SistemaOperativo int    `json:"sistemaOperativo"`
+	NombreDisco      string `json:"nombreDisco"`
 }
 
 type MaquinaFisica struct {
@@ -52,6 +54,12 @@ type MaquinaFisica struct {
 	Os            string   `json:"os"`
 	BridgeAdapter string   `json:"bridgeAdapter"`
 	Maquinas      []string `json:"maquinas"`
+}
+
+type Caracteristicas struct {
+	Ram     int `json:"ramMB"`
+	Cpu     int `json:"cpu"`
+	Storage int `json:"storageGB"`
 }
 
 type StringReq struct {
@@ -90,9 +98,6 @@ func handlervm(w http.ResponseWriter, r *http.Request) {
 		match := re.FindString(trimmedOutput)
 		fmt.Println(match)
 		mf, isHere = asignar(match)
-		if isHere {
-			request.TipoMV = 0
-		}
 		request.IdMF = mf.Id
 		guardarVM(request)
 	} else {
@@ -148,6 +153,7 @@ func asignar(ip string) (MaquinaFisica, bool) {
 		fmt.Println("NOT HEREEEEE")
 		var ale int = rand.Intn(len(lista))
 		mf = lista[ale]
+		break
 		var respuesta string = sendSSH(mf, addr+`/known_hosts`, addr+`/id_rsa`, "")
 		if !strings.Contains(respuesta, "Error") {
 			flag = false
@@ -161,7 +167,7 @@ Esta función tiene como propósito principal almacenar una máquina virtual en 
 Recibe como parámetro la máquina virtual a almacenar.
 */
 func guardarVM(vm MaquinaVirtual) {
-	jsonBody := []byte(`{"nombre":` + `"Debian` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":"` + obtenerHostName(vm.TipoMV) + `","idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `","estado":"` + vm.Estado + `","tipoMV":"` + strconv.Itoa(vm.TipoMV) + `","idMF":"` + strconv.Itoa(vm.IdMF) + `"}`)
+	jsonBody := []byte(`{"nombre":` + `"MaquinaVirtual` + vm.NumeroNombre + `","ip":"` + vm.IP + `","hostname":""` + `,"idUser":"` + strconv.Itoa(vm.IdUser) + `","contrasenia":"` + vm.Contrasenia + `","estado":"` + vm.Estado + `","tipoMV":"` + vm.TipoMV + `","idMF":"` + strconv.Itoa(vm.IdMF) + `","os":"` + strconv.Itoa(vm.SistemaOperativo) + `"}`)
 	req, err := http.NewRequest(http.MethodPost, ipApi+"/api/savevm", bytes.NewBuffer(jsonBody))
 	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
@@ -227,21 +233,11 @@ func clasificar(maquinaVirtual MaquinaVirtual, mf MaquinaFisica, isHere bool) st
 		break
 
 	case "create":
-
-		switch maquinaVirtual.TipoMV {
-		case 0:
-			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre
-			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-			break
-		case 1:
-			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 2 --memory 1024 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre + " --type headless"
-			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-			break
-		case 2:
-			comando = `VBoxManage createvm --name ` + nombre + ` --ostype Debian11_64 --register & VBoxManage modifyvm  ` + nombre + ` --cpus 4 --memory 2048 --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\VMTipo1.vdi" & VBoxManage startvm ` + nombre + " --type headless"
-			sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
-			break
-		}
+		var caracteristicas Caracteristicas = obtenerTipoMaquina(maquinaVirtual.TipoMV)
+		var disco = maquinaVirtual.NombreDisco
+		comando = `VBoxManage createvm --name ` + nombre + ` --ostype Linux --register & VBoxManage modifyvm  ` + nombre + ` --cpus ` + strconv.Itoa(caracteristicas.Cpu) + ` --memory ` + strconv.Itoa(caracteristicas.Ram) + ` --vram 128 --nic1 bridged & VBoxManage modifyvm  ` + nombre + ` --ioapic on --graphicscontroller vmsvga --boot1 disk & VBoxManage modifyvm  ` + nombre + ` --bridgeadapter1 "` + mf.BridgeAdapter + `" & VBoxManage storagectl  ` + nombre + ` --name "SATA Controller" --add sata --bootable on & VBoxManage storageattach  ` + nombre + ` --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "C:\Discos\` + disco + `.vdi" & VBoxManage startvm ` + nombre
+		fmt.Println(comando)
+		//sendSSH(mf, addr+"/known_hosts", addr+"/id_rsa", comando)
 		break
 
 	case "finish":
@@ -371,22 +367,22 @@ func actualizarEstado(id string, estado string) string {
 	return estadoRqst.Nombre
 }
 
-func obtenerHostName(id int) string {
-	requestURL := fmt.Sprintf(ipApi+"/api/getHostname/%d", id)
+func obtenerTipoMaquina(nombre string) Caracteristicas {
+	requestURL := fmt.Sprintf(ipApi + "/api/getTipoMaquina/" + nombre)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		log.Printf("Error: error making http request: %v", err)
 	}
 	resBody, err := io.ReadAll(res.Body)
 	//Se crea una variable tipo request en la cual se guardarán los datos del Json
-	hostname := StringReq{}
+	tipoMaquina := Caracteristicas{}
 
 	//Se decodifica el objeto Json y se guarda en la variable request
-	derr := json.Unmarshal(resBody, &hostname)
+	derr := json.Unmarshal(resBody, &tipoMaquina)
 	if derr != nil {
 		log.Printf("Error: %v", err)
 	}
-	return hostname.Nombre
+	return tipoMaquina
 }
 
 func leerIPs() {

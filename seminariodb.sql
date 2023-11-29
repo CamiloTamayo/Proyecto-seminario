@@ -32,7 +32,7 @@ CREATE TABLE `maquina_fisica` (
   `rammb` int(11) DEFAULT NULL,
   `storagegb` int(11) DEFAULT NULL,
   PRIMARY KEY (`idmf`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -41,8 +41,6 @@ CREATE TABLE `maquina_fisica` (
 
 LOCK TABLES `maquina_fisica` WRITE;
 /*!40000 ALTER TABLE `maquina_fisica` DISABLE KEYS */;
-INSERT INTO `maquina_fisica` VALUES
-(1,'Qualcomm Atheros QCA9377 Wireless Network Adapter',6,'Luz Stella','192.168.1.68','Windows 10 Home',4098,2048);
 /*!40000 ALTER TABLE `maquina_fisica` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -63,14 +61,17 @@ CREATE TABLE `maquina_virtual` (
   `mfisica_idmf` int(11) DEFAULT NULL,
   `tipo_maquina_id` int(11) DEFAULT NULL,
   `usuario_id` int(11) DEFAULT NULL,
+  `sistema_operativo_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `FKb8b2p2krjmyfqe5ssubadkewj` (`mfisica_idmf`),
   KEY `FK2cbdbuxp42exv4eu3jw5olyh2` (`tipo_maquina_id`),
   KEY `FKr3vc6iw935emt8krouxwvc1ym` (`usuario_id`),
+  KEY `FKpdotsi1eloflulqn6tyf54qcj` (`sistema_operativo_id`),
   CONSTRAINT `FK2cbdbuxp42exv4eu3jw5olyh2` FOREIGN KEY (`tipo_maquina_id`) REFERENCES `tipo_maquina` (`id`),
   CONSTRAINT `FKb8b2p2krjmyfqe5ssubadkewj` FOREIGN KEY (`mfisica_idmf`) REFERENCES `maquina_fisica` (`idmf`),
+  CONSTRAINT `FKpdotsi1eloflulqn6tyf54qcj` FOREIGN KEY (`sistema_operativo_id`) REFERENCES `sistema_operativo` (`id`),
   CONSTRAINT `FKr3vc6iw935emt8krouxwvc1ym` FOREIGN KEY (`usuario_id`) REFERENCES `usuario` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -80,6 +81,33 @@ CREATE TABLE `maquina_virtual` (
 LOCK TABLES `maquina_virtual` WRITE;
 /*!40000 ALTER TABLE `maquina_virtual` DISABLE KEYS */;
 /*!40000 ALTER TABLE `maquina_virtual` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `sistema_operativo`
+--
+
+DROP TABLE IF EXISTS `sistema_operativo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `sistema_operativo` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(50) DEFAULT NULL,
+  `hostname` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sistema_operativo`
+--
+
+LOCK TABLES `sistema_operativo` WRITE;
+/*!40000 ALTER TABLE `sistema_operativo` DISABLE KEYS */;
+INSERT INTO `sistema_operativo` VALUES
+(1,'Debian Server','vmtipo1'),
+(2,'Linux Mint','user');
+/*!40000 ALTER TABLE `sistema_operativo` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -95,10 +123,9 @@ CREATE TABLE `tipo_maquina` (
   `hostname` varchar(50) DEFAULT NULL,
   `nombre` varchar(50) DEFAULT NULL,
   `rammb` int(11) DEFAULT NULL,
-  `sistema_operativo` varchar(50) DEFAULT NULL,
   `storagegb` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -108,8 +135,9 @@ CREATE TABLE `tipo_maquina` (
 LOCK TABLES `tipo_maquina` WRITE;
 /*!40000 ALTER TABLE `tipo_maquina` DISABLE KEYS */;
 INSERT INTO `tipo_maquina` VALUES
-(1,2,'vmtipo1','vmtipo1',1024,'Debian 11 server',20),
-(2,4,'vmtipo1','vmtipo1',2048,'Debian 11 server',30);
+(1,2,'user','Basico',1024,20),
+(2,4,'user','Mediano',2048,30),
+(3,8,'user','Grande',4000,40);
 /*!40000 ALTER TABLE `tipo_maquina` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -158,7 +186,7 @@ CREATE TABLE `usuario` (
   PRIMARY KEY (`id`),
   KEY `FKe581tp719p3d7o5u2w9sre10b` (`tipo_usuario_id`),
   CONSTRAINT `FKe581tp719p3d7o5u2w9sre10b` FOREIGN KEY (`tipo_usuario_id`) REFERENCES `tipo_usuario` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -168,7 +196,9 @@ CREATE TABLE `usuario` (
 LOCK TABLES `usuario` WRITE;
 /*!40000 ALTER TABLE `usuario` DISABLE KEYS */;
 INSERT INTO `usuario` VALUES
-(1,'Tamayo Amariles','$2a$10$ED2jBd.R7BJl/NSlCHP8pO9fyWyNZ36QOYAWm2j2xBambr1Cc3XlS','juanc.tamayoa@uqvirtual.edu.co','Juan Camilo',1);
+(1,'Tamayo Amariles','$2a$10$ED2jBd.R7BJl/NSlCHP8pO9fyWyNZ36QOYAWm2j2xBambr1Cc3XlS','juanc.tamayoa@uqvirtual.edu.co','Juan Camilo',1),
+(2,'Zapata','$2a$10$NB4/YUTtWupJiqkiq6unPekPP03cWYHxnIUW50BlxxKfazPlq9jV.','r@gmail.com','Rodrigo',2),
+(3,'unlogged','$2a$10$2c9L23rl2k3JtZWvlLlJyuiggZstJ43kIF5oLQFvAYeAmbAyd/kRG','unlogged452667','',4);
 /*!40000 ALTER TABLE `usuario` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -181,4 +211,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2023-11-23 12:03:03
+-- Dump completed on 2023-11-28 22:57:50
