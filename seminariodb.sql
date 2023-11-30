@@ -95,7 +95,7 @@ CREATE TABLE `sistema_operativo` (
   `nombre` varchar(50) DEFAULT NULL,
   `hostname` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -125,7 +125,7 @@ CREATE TABLE `tipo_maquina` (
   `rammb` int(11) DEFAULT NULL,
   `storagegb` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -186,7 +186,7 @@ CREATE TABLE `usuario` (
   PRIMARY KEY (`id`),
   KEY `FKe581tp719p3d7o5u2w9sre10b` (`tipo_usuario_id`),
   CONSTRAINT `FKe581tp719p3d7o5u2w9sre10b` FOREIGN KEY (`tipo_usuario_id`) REFERENCES `tipo_usuario` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -197,8 +197,7 @@ LOCK TABLES `usuario` WRITE;
 /*!40000 ALTER TABLE `usuario` DISABLE KEYS */;
 INSERT INTO `usuario` VALUES
 (1,'Tamayo Amariles','$2a$10$ED2jBd.R7BJl/NSlCHP8pO9fyWyNZ36QOYAWm2j2xBambr1Cc3XlS','juanc.tamayoa@uqvirtual.edu.co','Juan Camilo',1),
-(2,'Zapata','$2a$10$NB4/YUTtWupJiqkiq6unPekPP03cWYHxnIUW50BlxxKfazPlq9jV.','r@gmail.com','Rodrigo',2),
-(3,'unlogged','$2a$10$2c9L23rl2k3JtZWvlLlJyuiggZstJ43kIF5oLQFvAYeAmbAyd/kRG','unlogged452667','',4);
+(4,'Pelaez','$2a$10$xMIoYEWafQ/qgDoa8cwBgeU4NtlgWZCxi36Fp9xyHilyViFvVFNyy','esteban@gmail.com','Esteban',1);
 /*!40000 ALTER TABLE `usuario` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -211,4 +210,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2023-11-28 22:57:50
+-- Dump completed on 2023-11-30  2:03:34
